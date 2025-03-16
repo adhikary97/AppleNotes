@@ -14,18 +14,53 @@ function NoteDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Helper function to process note content
-  const processNoteContent = (body) => {
-    // Check if content is HTML
+  // Helper function to process note content and remove duplicate title
+  const processNoteContent = (body, title) => {
+    if (!body) return "";
+
+    // Check if content starts with the title and remove it
+    let processedBody = body;
+
+    // First, check for plain text title at beginning
+    if (title && processedBody.trim().startsWith(title)) {
+      processedBody = processedBody.trim().substring(title.length).trim();
+    }
+
+    // Check for Markdown headings that match the title (# Title)
+    const headingPattern = new RegExp(
+      `^#+\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+      "m"
+    );
+    if (headingPattern.test(processedBody)) {
+      processedBody = processedBody.replace(headingPattern, "");
+    }
+
+    // Check for HTML title tags that match
+    const htmlTitlePattern = new RegExp(
+      `<h[1-6]>\\s*${title.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      )}\\s*</h[1-6]>`,
+      "i"
+    );
+    if (htmlTitlePattern.test(processedBody)) {
+      processedBody = processedBody.replace(htmlTitlePattern, "");
+    }
+
+    // Clean up any empty lines at the beginning
+    processedBody = processedBody.replace(/^\s+/, "");
+
+    // Return based on content type
     if (
-      body &&
-      (body.includes("<div>") || body.includes("<p>") || body.includes("<h1>"))
+      processedBody.includes("<div>") ||
+      processedBody.includes("<p>") ||
+      processedBody.includes("<h1>")
     ) {
       // HTML content
-      return body;
+      return processedBody;
     }
     // Return as is if already in Markdown or plain text
-    return body;
+    return processedBody;
   };
 
   // Format date for display
@@ -86,7 +121,7 @@ function NoteDetail() {
   if (error) return <div className="error">{error}</div>;
   if (!note) return <div className="not-found">Note not found</div>;
 
-  const processedContent = processNoteContent(note.body);
+  const processedContent = processNoteContent(note.body, note.title);
 
   return (
     <div className="note-detail">

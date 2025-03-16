@@ -14,8 +14,8 @@ function NotesList() {
   const [sortBy, setSortBy] = useState(DEFAULT_SORT_FIELD);
   const [sortOrder, setSortOrder] = useState(DEFAULT_SORT_ORDER);
 
-  // Helper function to extract text from HTML/Markdown
-  const extractTextFromContent = (content) => {
+  // Helper function to extract text from HTML/Markdown and remove duplicate title
+  const extractTextFromContent = (content, title) => {
     if (!content) return "";
 
     // Create a temporary element to parse HTML
@@ -35,6 +35,11 @@ function NotesList() {
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // Links
       .replace(/!\[([^\]]+)\]\([^)]+\)/g, "$1") // Images
       .trim();
+
+    // Remove title if it appears at the beginning of the content
+    if (title && text.trim().startsWith(title.trim())) {
+      text = text.trim().substring(title.trim().length).trim();
+    }
 
     return text;
   };
@@ -125,7 +130,9 @@ function NotesList() {
       filtered = filtered.filter(
         (note) =>
           note.title.toLowerCase().includes(query) ||
-          extractTextFromContent(note.body).toLowerCase().includes(query)
+          extractTextFromContent(note.body, note.title)
+            .toLowerCase()
+            .includes(query)
       );
     }
 
@@ -221,7 +228,7 @@ function NotesList() {
           <p className="no-notes">No notes found</p>
         ) : (
           filteredNotes.map((note) => {
-            const previewText = extractTextFromContent(note.body);
+            const previewText = extractTextFromContent(note.body, note.title);
 
             return (
               <Link
