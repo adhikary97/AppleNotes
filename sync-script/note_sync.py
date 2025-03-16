@@ -278,12 +278,16 @@ def update_firebase(notes):
     count_new = 0
     count_updated = 0
 
+    # Keep track of current note IDs for deletion check
+    current_note_ids = set()
+
     # Process each note
     for note in notes:
         note_id = note["id"]
 
-        # Create a Firebase-safe key from the note ID
+        # Add to current note IDs set
         safe_id = note_id.replace("/", "_").replace(".", "_")
+        current_note_ids.add(safe_id)
 
         # Sanitize the note data to prevent Firebase errors
         sanitized_note = sanitize_note_data(note)
@@ -302,10 +306,19 @@ def update_firebase(notes):
             updates[f"notes/{safe_id}"] = sanitized_note
             count_new += 1
 
+    # Find notes to delete (in Firebase but not in Apple Notes)
+    notes_to_delete = []
+    for firebase_id in existing_notes:
+        if firebase_id not in current_note_ids:
+            notes_to_delete.append(firebase_id)
+
+    count_deleted = len(notes_to_delete)
+
     print(f"New notes to add: {count_new}")
     print(f"Existing notes to update: {count_updated}")
+    print(f"Notes to delete: {count_deleted}")
 
-    # Update the database if there are changes
+    # Update the database with new and modified notes
     if updates:
         # Update in smaller batches to avoid timeouts
         batch_size = 30  # Reduced batch size to minimize errors
@@ -352,10 +365,42 @@ def update_firebase(notes):
     else:
         print("No changes to update in Firebase")
 
+    # Handle deletions in small batches
+    if notes_to_delete:
+        deletion_batch_size = 20
+        deletion_batches = [
+            notes_to_delete[i : i + deletion_batch_size]
+            for i in range(0, len(notes_to_delete), deletion_batch_size)
+        ]
+
+        successful_deletions = 0
+        for i, batch in enumerate(deletion_batches):
+            print(f"Processing deletion batch {i+1}/{len(deletion_batches)}...")
+
+            for note_id in batch:
+                try:
+                    # Delete the note
+                    db.child("notes").child(note_id).remove()
+                    successful_deletions += 1
+                    time.sleep(0.1)  # Small delay between individual deletions
+                except Exception as e:
+                    print(f"Error deleting note {note_id}: {e}")
+
+            # Add a delay between deletion batches
+            time.sleep(1)
+
+        print(
+            f"Successfully deleted {successful_deletions} of {count_deleted} notes from Firebase"
+        )
+
     # Update last sync timestamp and note count
     try:
         db.child("metadata").update(
-            {"last_sync": datetime.now().isoformat() + "Z", "note_count": len(notes)}
+            {
+                "last_sync": datetime.now().isoformat() + "Z",
+                "note_count": len(notes),
+                "deleted_count": count_deleted,
+            }
         )
         print("Updated metadata in Firebase")
     except Exception as e:
